@@ -114,7 +114,7 @@
                             <goal>shade</goal>
                         </goals>
                         <configuration>
-                            <minimizeJar>true</minimizeJar>
+                            <minimizeJar>false</minimizeJar>
                             <artifactSet>
                                 <includes>
                                     <!-- gradoop dependencies -->
@@ -129,6 +129,12 @@
                                     <include>com.github.s1ck:gdl</include>
                                     <include>org.antlr:antlr4-runtime</include>
                                     <include>me.lemire.integercompression:*</include>
+                                    <!-- new shades -->
+                                    <include>com.google.guava:*</include>
+                                    <include>org.apache.hadoop:*</include>
+                                    <include>commons-logging:commons-logging</include>
+                                    <include>log4j:log4j</include>
+                                    <inlude>org.apache.hadoop:*</inlude>
                                     <!-- capf example dependencies -->
                                     <include>org.opencypher:*</include>
                                     <include>org.apache.flink:flink-table_2.11</include>
