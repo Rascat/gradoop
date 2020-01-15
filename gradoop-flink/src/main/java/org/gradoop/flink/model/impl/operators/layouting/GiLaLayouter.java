@@ -35,6 +35,7 @@ import org.gradoop.common.model.impl.properties.Properties;
 import org.gradoop.flink.algorithms.gelly.GradoopGellyAlgorithm;
 import org.gradoop.flink.algorithms.gelly.functions.EdgeToGellyEdgeWithNullValue;
 import org.gradoop.flink.algorithms.gelly.functions.VertexToGellyVertex;
+import org.gradoop.flink.model.impl.epgm.GraphCollection;
 import org.gradoop.flink.model.impl.epgm.LogicalGraph;
 import org.gradoop.flink.model.impl.operators.layouting.functions.FRAttractionFunction;
 import org.gradoop.flink.model.impl.operators.layouting.functions.FRForceApplicator;
@@ -196,6 +197,11 @@ public class GiLaLayouter extends
     graph = pruner.reinsert(graph);
 
     return graph;
+  }
+
+  @Override
+  public GraphCollection execute(GraphCollection collection) {
+    return null;
   }
 
   @Override

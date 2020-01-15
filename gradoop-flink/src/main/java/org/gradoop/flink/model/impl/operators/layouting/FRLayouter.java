@@ -24,6 +24,7 @@ import org.apache.flink.api.java.operators.IterativeDataSet;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.gradoop.common.model.impl.pojo.EPGMEdge;
 import org.gradoop.common.model.impl.pojo.EPGMVertex;
+import org.gradoop.flink.model.impl.epgm.GraphCollection;
 import org.gradoop.flink.model.impl.epgm.LogicalGraph;
 import org.gradoop.flink.model.impl.operators.layouting.functions.FRAttractionFunction;
 import org.gradoop.flink.model.impl.operators.layouting.functions.FRCellIdMapper;
@@ -226,6 +227,27 @@ public class FRLayouter implements LayoutingAlgorithm {
     return g.getFactory().fromDataSets(gradoopVertices, gradoopEdges);
   }
 
+  @Override
+  public GraphCollection execute(GraphCollection collection) {
+    collection = createInitialLayout(collection);
+
+    DataSet<EPGMVertex> epgmVertices = collection.getVertices();
+    DataSet<EPGMEdge> epgmEdges = collection.getEdges();
+
+    DataSet<LVertex> vertices = epgmVertices.map(LVertex::new);
+    DataSet<LEdge> edges = epgmEdges.map(LEdge::new);
+
+    IterativeDataSet<LVertex> loop = vertices.iterate(iterations);
+    LGraph graph = new LGraph(loop, edges);
+    layout(graph);
+    vertices = loop.closeWith(graph.getVertices());
+
+    epgmVertices = vertices.join(epgmVertices).where(LVertex.ID_POSITION).equalTo("id")
+      .with(new LVertexEPGMVertexJoinFunction());
+
+    return collection.getFactory().fromDataSets(collection.getGraphHeads(), epgmVertices, epgmEdges);
+  }
+
   /**
    * Creates a layout as the starting-point for the algorithm. If useExistingLayout is false, the
    * created layout is random, else it is the already existing layout of the graph.
@@ -239,6 +261,21 @@ public class FRLayouter implements LayoutingAlgorithm {
     }
     return new RandomLayouter(getWidth() / 10, getWidth() - (getWidth() / 10), getHeight() / 10,
       getHeight() - (getHeight() / 10)).execute(g);
+  }
+
+  /**
+   * Creates a layout as the starting-point for the algorithm. If useExistingLayout is false, the
+   * created layout is random, else it is the already existing layout of the graph.
+   *
+   * @param collection GraphCollection
+   * @return GraphCollection with positioned vertices.
+   */
+  protected GraphCollection createInitialLayout(GraphCollection collection) {
+    if (useExistingLayout) {
+      return collection;
+    }
+    return new RandomLayouter(getWidth() / 10, getWidth() - (getWidth() / 10), getHeight() / 10,
+      getHeight() - (getHeight() / 10)).execute(collection);
   }
 
   /**

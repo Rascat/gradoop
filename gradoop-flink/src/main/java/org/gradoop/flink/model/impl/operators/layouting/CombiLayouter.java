@@ -15,6 +15,7 @@
  */
 package org.gradoop.flink.model.impl.operators.layouting;
 
+import org.gradoop.flink.model.impl.epgm.GraphCollection;
 import org.gradoop.flink.model.impl.epgm.LogicalGraph;
 
 /**
@@ -177,6 +178,11 @@ public class CombiLayouter implements LayoutingAlgorithm {
       g = fRLayouter.execute(g);
     }
     return g;
+  }
+
+  @Override
+  public GraphCollection execute(GraphCollection collection) {
+    return null;
   }
 
   @Override

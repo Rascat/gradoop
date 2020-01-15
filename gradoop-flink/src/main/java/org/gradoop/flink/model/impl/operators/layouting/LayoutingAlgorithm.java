@@ -15,6 +15,7 @@
  */
 package org.gradoop.flink.model.impl.operators.layouting;
 
+import org.gradoop.flink.model.api.operators.UnaryCollectionToCollectionOperator;
 import org.gradoop.flink.model.api.operators.UnaryGraphToGraphOperator;
 import org.gradoop.flink.model.impl.epgm.LogicalGraph;
 
@@ -23,7 +24,7 @@ import org.gradoop.flink.model.impl.epgm.LogicalGraph;
  * to each vertex in a graph). Layouted graphs can be converted to
  * images using {@link org.gradoop.flink.io.impl.image.ImageDataSink}.
  */
-public interface LayoutingAlgorithm extends UnaryGraphToGraphOperator {
+public interface LayoutingAlgorithm extends UnaryGraphToGraphOperator, UnaryCollectionToCollectionOperator {
 
   /**
    * The name of the property where the X-Coordinate of a vertex is stored

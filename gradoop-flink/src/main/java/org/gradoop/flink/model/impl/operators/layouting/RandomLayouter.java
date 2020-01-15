@@ -19,6 +19,7 @@ import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.DataSet;
 import org.gradoop.common.model.impl.pojo.EPGMVertex;
 import org.gradoop.common.model.impl.properties.PropertyValue;
+import org.gradoop.flink.model.impl.epgm.GraphCollection;
 import org.gradoop.flink.model.impl.epgm.LogicalGraph;
 
 import java.util.concurrent.ThreadLocalRandom;
@@ -74,8 +75,17 @@ public class RandomLayouter implements LayoutingAlgorithm, MapFunction<EPGMVerte
     return g.getFactory().fromDataSets(placed, g.getEdges());
   }
 
+  @Override
+  public GraphCollection execute(GraphCollection collection) {
+    if (rng == null) {
+      rng = ThreadLocalRandom.current();
+    }
+    DataSet<EPGMVertex> placed = collection.getVertices().map(this);
 
-  //TODO having this public method just to deal with serializability of the map-class is ugly
+    return collection.getFactory()
+      .fromDataSets(collection.getGraphHeads(), placed, collection.getEdges());
+  }
+
   @Override
   public EPGMVertex map(EPGMVertex old) throws Exception {
     PropertyValue xcoord = PropertyValue.create(rng.nextInt(maxX - minX) + minX);
