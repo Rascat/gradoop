@@ -438,8 +438,31 @@ public class ImageDataSink implements DataSink, Serializable {
   }
 
   @Override
-  public void write(GraphCollection graphCollection, boolean overwrite) throws IOException {
-    throw new UnsupportedOperationException("Plotting is not supported for GraphCollections");
+  public void write(GraphCollection collection, boolean overwrite) throws IOException {
+    ImageOutputFormat pof = new ImageOutputFormat(path);
+    FileSystem.WriteMode writeMode =
+      overwrite ? FileSystem.WriteMode.OVERWRITE : FileSystem.WriteMode.NO_OVERWRITE;
+    pof.setWriteMode(writeMode);
+
+    DataSet<EPGMVertex> vertices = scaleLayout(collection.getVertices());
+    DataSet<EPGMEdge> edges = prepareEdges(vertices, collection.getEdges());
+
+    ImageGenerator imgg = new ImageGenerator(this);
+    DataSet<byte[]> image = edges.combineGroup(imgg::combineEdges).reduce(imgg::mergeImages);
+    if (!ignoreVertices) {
+      DataSet<byte[]> vertexImage =
+        vertices.combineGroup(imgg::combineVertices).reduce(imgg::mergeImages);
+      image = image.map(new RichMapFunction<byte[], byte[]>() {
+        @Override
+        public byte[] map(byte[] bufferedImage) throws Exception {
+          List<byte[]> vertexImage = this.getRuntimeContext().getBroadcastVariable("vertexImage");
+          return imgg.mergeImages(bufferedImage, vertexImage.get(0));
+        }
+      }).withBroadcastSet(vertexImage, "vertexImage");
+    }
+    image = image.map(imgg::addBackground);
+
+    image.output(pof).setParallelism(1);
   }
 
   /**
