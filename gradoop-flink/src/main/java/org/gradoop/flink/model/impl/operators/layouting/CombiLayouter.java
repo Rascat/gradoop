@@ -182,7 +182,13 @@ public class CombiLayouter implements LayoutingAlgorithm {
 
   @Override
   public GraphCollection execute(GraphCollection collection) {
-    return null;
+    if (centroidFRLayouter != null) {
+      collection = centroidFRLayouter.execute(collection);
+    }
+    if (fRLayouter != null) {
+      collection = fRLayouter.execute(collection);
+    }
+    return collection;
   }
 
   @Override
