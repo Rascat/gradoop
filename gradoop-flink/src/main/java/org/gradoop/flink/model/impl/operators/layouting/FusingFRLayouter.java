@@ -19,6 +19,7 @@ import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.operators.IterativeDataSet;
 import org.gradoop.common.model.impl.pojo.EPGMEdge;
 import org.gradoop.common.model.impl.pojo.EPGMVertex;
+import org.gradoop.flink.model.impl.epgm.GraphCollection;
 import org.gradoop.flink.model.impl.epgm.LogicalGraph;
 import org.gradoop.flink.model.impl.functions.epgm.Id;
 import org.gradoop.flink.model.impl.operators.layouting.functions.DefaultVertexCompareFunction;
@@ -202,10 +203,61 @@ public class FusingFRLayouter extends FRLayouter {
 
   }
 
+  @Override
+  public GraphCollection execute(GraphCollection collection) {
+    applicator = new FRForceApplicator(getWidth(), getHeight(), getK(),
+      (outputFormat != OutputFormat.POSTLAYOUT) ? iterations : iterations - POST_ITERATIONS);
+
+    collection = createInitialLayout(collection);
+
+    DataSet<EPGMVertex> gradoopVertices = collection.getVertices();
+    DataSet<EPGMEdge> gradoopEdges = collection.getEdges();
+
+    // Flink can only iterate over a single dataset. Therefore vertices and edges have to be
+    // temporarily combined into a single dataset.
+    // Also the Grapdoop datatypes are converted to internal datatypes
+    DataSet<GraphElement> tmpvertices = gradoopVertices.map((v) -> new LVertex(v));
+    DataSet<GraphElement> tmpedges = gradoopEdges.map((e) -> new LEdge(e));
+    DataSet<GraphElement> graphElements = tmpvertices.union(tmpedges);
+
+    IterativeDataSet<GraphElement> loop = graphElements.iterate(
+      (outputFormat != OutputFormat.POSTLAYOUT) ? iterations : iterations - POST_ITERATIONS);
+
+    // split the combined dataset to work with the edges and vertices
+    LGraph graph = new LGraph(loop);
+
+    // perform the layouting
+    layout(graph);
+
+    // Use the VertexFusor to create a simplified version of the graph
+    graph = new VertexFusor(getCompareFunction(), threshold).execute(graph);
+
+    // again, combine vertices and edges into a single dataset to perform iterations
+    graphElements = graph.getGraphElements();
+    graphElements = loop.closeWith(graphElements);
+
+    // again, split the combined dataset  (after all iterations have been completed)
+    graph = new LGraph(graphElements);
+
+
+    switch (outputFormat) {
+    case SIMPLIFIED:
+      return buildSimplifiedGraph(collection, graph);
+    case EXTRACTED:
+      return buildExtractedGraph(collection, graph, true);
+    case RAWEXTRACTED:
+      return buildExtractedGraph(collection, graph, false);
+    case POSTLAYOUT:
+      return buildPostLayoutGraph(collection, graph);
+    default:
+      throw new IllegalArgumentException("Unsupported output-format");
+    }
+  }
+
   /**
-   * Extract all subverties/subedges from the super-vertices/super-edges and place them at the
+   * Extract all sub-vertices/sub-edges from the super-vertices/super-edges and place them at the
    * location of the super-vertex (and add some random jitter to the positions).
-   * Then some more layouting-iteraions are performed.
+   * Then some more layouting-iterations are performed.
    *
    * @param input Original input graph
    * @param graph Result of the layouting
@@ -239,6 +291,42 @@ public class FusingFRLayouter extends FRLayouter {
   }
 
   /**
+   * Extract all sub-vertices/sub-edges from the super-vertices/super-edges and place them at the
+   * location of the super-vertex (and add some random jitter to the positions).
+   * Then some more layouting-iterations are performed.
+   *
+   * @param input Original input graph collection
+   * @param graph Result of the layouting
+   * @return The final graph collection, containing all vertices and edges from the original graph.
+   */
+  protected GraphCollection buildPostLayoutGraph(GraphCollection input, LGraph graph) {
+    DataSet<LVertex> vertices = graph.getVertices().flatMap(new LVertexFlattener(true, getK()));
+
+    DataSet<LEdge> edges = input.getEdges().map(LEdge::new);
+    graph.setEdges(edges);
+
+
+    // use a new applicator for all following layouting iterations. The new applicator will
+    // behave as if iteration x of n is actually iterations+x of n+POST_ITERATIONS
+    applicator =
+      new FRForceApplicator(getWidth(), getHeight(), getK(), iterations + POST_ITERATIONS);
+    applicator.setPreviousIterations(iterations);
+
+    // do some more layouting iterations
+    IterativeDataSet<LVertex> loop = vertices.iterate(POST_ITERATIONS);
+    graph.setVertices(loop);
+    layout(graph);
+    vertices = loop.closeWith(graph.getVertices());
+
+
+    DataSet<EPGMVertex> gradoopVertices =
+      vertices.join(input.getVertices()).where(LVertex.ID_POSITION).equalTo("id")
+        .with(new LVertexEPGMVertexJoinFunction());
+
+    return input.getFactory().fromDataSets(input.getGraphHeads(), gradoopVertices, input.getEdges());
+  }
+
+  /**
    * Simply translate the internal representations back to {@link LogicalGraph}.
    *
    * @param input    Original input graph
@@ -250,21 +338,49 @@ public class FusingFRLayouter extends FRLayouter {
   }
 
   /**
-   * Extract all subverties/subedges from the super-vertices/super-edges and place them at the
+   * Simply translate the internal representations back to {@link GraphCollection}.
+   *
+   * @param input    Original input graph collection
+   * @param layouted Result of the layouting
+   * @return The layouted graph in the Gradoop-format
+   */
+  protected GraphCollection buildSimplifiedGraph(GraphCollection input, LGraph layouted) {
+    return new LGraphToEPGMMapper().buildSimplifiedGraph(input, layouted);
+  }
+
+  /**
+   * Extract all sub-vertices/sub-edges from the super-vertices/super-edges and place them at the
    * location of the super-vertex (and add some random jitter to the positions)
    *
    * @param input    Original input graph
    * @param layouted Result of the layouting
-   * @param jitter   Enable/disable adding jitter to subvertex positions
+   * @param jitter   Enable/disable adding jitter to sub-vertex positions
    * @return The final graph, containing all vertices and edges from the original graph.
    */
   protected LogicalGraph buildExtractedGraph(LogicalGraph input, LGraph layouted,
-    final boolean jitter) {
+                                             final boolean jitter) {
 
     DataSet<EPGMVertex> vertices =
       layouted.getVertices().flatMap(new LVertexFlattener(jitter, getK())).join(input.getVertices())
         .where(LVertex.ID_POSITION).equalTo(new Id<>()).with(new LVertexEPGMVertexJoinFunction());
     return input.getFactory().fromDataSets(vertices, input.getEdges());
+  }
+
+  /**
+   * Extract all sub-vertices/sub-edges from the super-vertices/super-edges and place them at the
+   * location of the super-vertex (and add some random jitter to the positions)
+   *
+   * @param input    Original input graph collection
+   * @param layouted Result of the layouting
+   * @param jitter   Enable/disable adding jitter to sub-vertex positions
+   * @return The final graph collection, containing all vertices and edges from the original graph.
+   */
+  protected GraphCollection buildExtractedGraph(GraphCollection input, LGraph layouted,
+                                                final boolean jitter) {
+    DataSet<EPGMVertex> vertices =
+      layouted.getVertices().flatMap(new LVertexFlattener(jitter, getK())).join(input.getVertices())
+      .where(LVertex.ID_POSITION).equalTo(new Id<>()).with(new LVertexEPGMVertexJoinFunction());
+    return input.getFactory().fromDataSets(input.getGraphHeads(), vertices, input.getEdges());
   }
 
   @Override

@@ -20,6 +20,7 @@ import org.gradoop.common.model.impl.id.GradoopId;
 import org.gradoop.common.model.impl.pojo.EPGMEdge;
 import org.gradoop.common.model.impl.pojo.EPGMVertex;
 import org.gradoop.common.model.impl.properties.Properties;
+import org.gradoop.flink.model.impl.epgm.GraphCollection;
 import org.gradoop.flink.model.impl.epgm.LogicalGraph;
 import org.gradoop.flink.model.impl.operators.layouting.FusingFRLayouter;
 import org.gradoop.flink.model.impl.operators.layouting.util.LEdge;
@@ -45,6 +46,19 @@ public class LGraphToEPGMMapper {
     DataSet<EPGMVertex> vertices = layouted.getVertices().map(LGraphToEPGMMapper::mapTpEPGMVertex);
     DataSet<EPGMEdge> edges = layouted.getEdges().map(LGraphToEPGMMapper::mapToEPGMEdge);
     return input.getFactory().fromDataSets(vertices, edges);
+  }
+
+  /**
+   * Build a new {@link GraphCollection} from the given LGraph, by converting LVertices to vertices 1:1.
+   *
+   * @param input    The original GraphCollection, to use it's factory
+   * @param layouted The LGraph to convert
+   * @return The converted LGraph
+   */
+  public GraphCollection buildSimplifiedGraph(GraphCollection input, LGraph layouted) {
+    DataSet<EPGMVertex> vertices = layouted.getVertices().map(LGraphToEPGMMapper::mapTpEPGMVertex);
+    DataSet<EPGMEdge> edges = layouted.getEdges().map(LGraphToEPGMMapper::mapToEPGMEdge);
+    return input.getFactory().fromDataSets(input.getGraphHeads(), vertices, edges);
   }
 
   /**
