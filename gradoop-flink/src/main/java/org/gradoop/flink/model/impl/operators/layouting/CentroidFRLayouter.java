@@ -19,6 +19,7 @@ import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.operators.IterativeDataSet;
 import org.gradoop.common.model.impl.pojo.EPGMEdge;
 import org.gradoop.common.model.impl.pojo.EPGMVertex;
+import org.gradoop.flink.model.impl.epgm.GraphCollection;
 import org.gradoop.flink.model.impl.epgm.LogicalGraph;
 import org.gradoop.flink.model.impl.functions.epgm.Id;
 import org.gradoop.flink.model.impl.operators.layouting.functions.AverageVertexPositionsFunction;
@@ -117,6 +118,47 @@ public class CentroidFRLayouter extends FRLayouter {
       .with(new LVertexEPGMVertexJoinFunction());
 
     return g.getFactory().fromDataSets(gradoopVertices, gradoopEdges);
+  }
+
+  @Override
+  public GraphCollection execute(GraphCollection collection) {
+    collection = createInitialLayout(collection);
+
+    DataSet<EPGMVertex> gradoopVertices = collection.getVertices();
+    DataSet<EPGMEdge> gradoopEdges = collection.getEdges();
+
+    DataSet<LVertex> vertices = gradoopVertices.map(LVertex::new);
+    DataSet<LEdge> edges = gradoopEdges.map(LEdge::new);
+
+    centroids = chooseInitialCentroids(vertices);
+
+    // flink can only iterate over one dataset at once. Create a dataset containing both
+    // centroids and vertices. Split them again at the begin of every iteration
+    DataSet<GraphElement> graphElements = vertices.map(x -> x);
+    graphElements = graphElements.union(centroids.map(x -> x));
+
+    IterativeDataSet<GraphElement> loop = graphElements.iterate(iterations);
+    vertices = loop.filter(x -> x instanceof LVertex).map(x -> (LVertex) x);
+    centroids = loop.filter(x -> x instanceof Centroid).map(x -> (Centroid) x);
+
+    centroids = calculateNewCentroids(centroids, vertices);
+    center = calculateLayoutCenter(vertices);
+
+    LGraph graph = new LGraph(vertices, edges);
+    // we have overridden repulsionForces() so layout() will use or new centroid-based solution
+    layout(graph);
+
+    graphElements = graph.getVertices().map(x -> x);
+    graphElements = graphElements.union(centroids.map(x -> x));
+
+    graphElements = loop.closeWith(graphElements);
+
+    vertices = graphElements.filter(x -> x instanceof LVertex).map(x -> (LVertex) x);
+
+    gradoopVertices = vertices.join(gradoopVertices).where(LVertex.ID_POSITION).equalTo(new Id<>())
+      .with(new LVertexEPGMVertexJoinFunction());
+
+    return collection.getFactory().fromDataSets(collection.getGraphHeads(), gradoopVertices, gradoopEdges);
   }
 
   /* override and calculate repulsionFoces using centroids. Everything else stays like in the
