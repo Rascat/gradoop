@@ -325,10 +325,8 @@ public class FRLayouter implements LayoutingAlgorithm {
   protected DataSet<Force> repulsionForces(DataSet<LVertex> vertices) {
     vertices = vertices.map(new FRCellIdMapper(getMaxRepulsionDistance()));
 
-    KeySelector<LVertex, Integer> selfselector =
-      new FRCellIdSelector(FRCellIdSelector.NeighborType.SELF);
-    FRRepulsionFunction repulsionFunction =
-      new FRRepulsionFunction(getK(), getMaxRepulsionDistance());
+    KeySelector<LVertex, Integer> selfselector = new FRCellIdSelector(FRCellIdSelector.NeighborType.SELF);
+    FRRepulsionFunction repulsionFunction = new FRRepulsionFunction(getK(), getMaxRepulsionDistance());
 
     DataSet<Force> self =
       vertices.join(vertices).where(new FRCellIdSelector(FRCellIdSelector.NeighborType.SELF))

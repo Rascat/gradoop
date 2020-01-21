@@ -47,8 +47,7 @@ public class FRCellIdSelector implements KeySelector<LVertex, Integer> {
     int cellid = value.getCellid();
     int xcell = cellid >> 16;
     int ycell = cellid & 0xFFFF;
-    if (type == NeighborType.RIGHT || type == NeighborType.UPRIGHT ||
-      type == NeighborType.DOWNRIGHT) {
+    if (type == NeighborType.RIGHT || type == NeighborType.UPRIGHT || type == NeighborType.DOWNRIGHT) {
       xcell++;
     }
     if (type == NeighborType.LEFT || type == NeighborType.DOWNLEFT || type == NeighborType.UPLEFT) {
@@ -57,8 +56,7 @@ public class FRCellIdSelector implements KeySelector<LVertex, Integer> {
     if (type == NeighborType.UP || type == NeighborType.UPLEFT || type == NeighborType.UPRIGHT) {
       ycell--;
     }
-    if (type == NeighborType.DOWN || type == NeighborType.DOWNLEFT ||
-      type == NeighborType.DOWNRIGHT) {
+    if (type == NeighborType.DOWN || type == NeighborType.DOWNLEFT || type == NeighborType.DOWNRIGHT) {
       ycell++;
     }
 
